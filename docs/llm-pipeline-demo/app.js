@@ -11,6 +11,12 @@
 /** Vocabulary size of the katgpt-rs micro-model (a–z + BOS = 27). */
 const MICRO_VOCAB_SIZE = 27;
 
+/**
+ * Track cancellable timeouts for a demo section so manual stop/reset actions
+ * can tear down pending callbacks and awaited delays without leaking work.
+ * Returns helpers for fire-and-forget callbacks (`set`), awaited pauses (`sleep`),
+ * and bulk cleanup (`cancelAll`).
+ */
 function createTimerGroup() {
   const entries = new Set();
 
@@ -216,7 +222,7 @@ function setText(id, text) {
    * geometric series, giving the closed form below.
    */
   function expectedAccepted(alpha, gamma) {
-    if (Math.abs(1.0 - alpha) < Number.EPSILON) return gamma + 1;
+    if (Math.abs(1.0 - alpha) < 1e-6) return gamma + 1;
     // Correct Leviathan formula:
     // E[#accepted] = (1 - α^(γ+1)) / (1 - α)
     return (1 - Math.pow(alpha, gamma + 1)) / (1 - alpha);
@@ -266,7 +272,7 @@ function setText(id, text) {
 
     // ---- pruning ----
     const prunedBranches = Math.round(gamma * MICRO_VOCAB_SIZE * rho);
-    const computeSaved   = (rho * 100).toFixed(0);
+    const computeSavedPercent = (rho * 100).toFixed(0);
 
     // Update DOM
     setText('m-tpr',    tpr.toFixed(2) + ' tok');
@@ -276,7 +282,7 @@ function setText(id, text) {
     setText('m-speedup', speedup.toFixed(1) + '×');
     setText('m-lat-kat', Math.round(totalKatMs).toLocaleString() + ' ms');
     setText('m-lat-std', Math.round(totalStdMs).toLocaleString() + ' ms');
-    setText('m-pruned', prunedBranches + ' nodes (' + computeSaved + '% saved)');
+    setText('m-pruned', prunedBranches + ' nodes (' + computeSavedPercent + '% saved)');
 
     // Progress bars (latency comparison)
     const maxLat = Math.max(totalKatMs, totalStdMs);
@@ -755,10 +761,8 @@ function setText(id, text) {
 
     for (const [r, c, digit] of FILL_SEQ) {
       const el = cellEl(r, c);
-      let draftDigit = digit;
-      while (draftDigit === digit) {
-        draftDigit = Math.floor(Math.random() * 9) + 1;
-      }
+      const draftChoices = [1, 2, 3, 4, 5, 6, 7, 8, 9].filter(value => value !== digit);
+      const draftDigit = draftChoices[Math.floor(Math.random() * draftChoices.length)];
 
       paintCell(el, r, c, draftDigit, 'draft');
       if (logEl) logEl.textContent = `Trying cell(${r + 1},${c + 1}): draft=${draftDigit} → constraint check…`;

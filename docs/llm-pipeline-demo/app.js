@@ -146,7 +146,7 @@ function setText(id, text) {
     span.textContent = text;
     trackEl.appendChild(span);
 
-    while (trackEl.children.length > MAX_VISIBLE_TOKENS) {
+    if (trackEl.children.length > MAX_VISIBLE_TOKENS) {
       const first = trackEl.firstChild;
       first.style.transition = 'opacity .2s';
       first.style.opacity = '0';

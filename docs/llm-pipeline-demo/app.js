@@ -6,7 +6,12 @@
 'use strict';
 
 // -------------------------------------------------------
-// TOC active link on scroll
+// Configuration constants
+// -------------------------------------------------------
+/** Vocabulary size of the katgpt-rs micro-model (a–z + BOS = 27). */
+const MICRO_VOCAB_SIZE = 27;
+
+
 // -------------------------------------------------------
 (function () {
   const links = document.querySelectorAll('.toc-inner a');
@@ -110,12 +115,13 @@
 
   /**
    * Expected accepted tokens per round with speculative decoding.
-   * With acceptance rate α and lookahead γ:
-   *   E[accepted] = Σ_{k=1}^{γ} α^k + α^γ  (bonus token on full accept)
-   *               = α(1-α^γ)/(1-α) + α^γ
+   * Derived from Leviathan et al. 2022 (Algorithm 1):
+   *   - At each depth k (1…γ), a token is accepted with probability α^k.
+   *   - On full acceptance of all γ tokens, a bonus token is sampled (always accepted).
+   *   - Therefore E[#tokens] = Σ_{k=1}^{γ} α^k  +  α^γ  = (1 - α^(γ+1)) / (1 - α)
    *
-   * This simplifies to: (1 - α^(γ+1)) / (1 - α) for α ≠ 1
-   * (The +1 comes from the guaranteed bonus token on full acceptance path)
+   * The +1 from the bonus token is captured by the exponent going to (γ+1) in the
+   * geometric series, giving the closed form below.
    */
   function expectedAccepted(alpha, gamma) {
     if (alpha >= 1.0) return gamma + 1;
@@ -167,8 +173,7 @@
     const speedup = tpsKat / tpsStd;
 
     // ---- pruning ----
-    const vocabSize  = 27; // repo micro-vocab
-    const prunedBranches = Math.round(gamma * vocabSize * rho);
+    const prunedBranches = Math.round(gamma * MICRO_VOCAB_SIZE * rho);
     const computeSaved   = (rho * 100).toFixed(0);
 
     // Update DOM

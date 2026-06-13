@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KatGPT-RS — LLM Pipeline Interactive Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ============================================================
+  HERO
+  ============================================================ -->
+<header class="hero" id="top">
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-text">
+        <div class="badge badge-blue">Educational Demo</div>
+        <h1>How does an LLM actually work?<br/>
+          <span>…and how does <em>katgpt-rs</em> go faster?</span>
+        </h1>
+        <p>
+          An interactive, animated explainer for developers who have never worked with
+          language models before. We'll walk through the standard LLM pipeline, then
+          dive into the hybrid speculative-decoding architecture used in
+          <strong>katgpt-rs</strong>.
+        </p>
+      </div>
+      <div class="hero-visual">
+        <div class="tps-badge">
+          <div class="tps-num">~30 k</div>
+          <div class="tps-label">tokens / second<br/>katgpt-rs target (micro-model)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================
+  TOC / NAV
+  ============================================================ -->
+<nav class="toc">
+  <div class="toc-inner">
+    <a href="#std-pipeline">1 · Standard LLM</a>
+    <a href="#kat-pipeline">2 · katgpt-rs Pipeline</a>
+    <a href="#compare">3 · Side-by-Side</a>
+    <a href="#interactive">4 · Interactive Sim</a>
+    <a href="#animation">5 · Animate</a>
+    <a href="#tree-viz">6 · DDTree</a>
+    <a href="#game">7 · Games &amp; Puzzles</a>
+    <a href="#glossary">8 · Glossary</a>
+  </div>
+</nav>
+
+<!-- ============================================================
+  1. STANDARD LLM PIPELINE
+  ============================================================ -->
+<section id="std-pipeline">
+  <div class="container">
+    <div class="badge badge-blue">Section 1</div>
+    <h2>The Standard LLM Pipeline</h2>
+    <p class="section-subtitle">
+      Every time you type a prompt into ChatGPT or another LLM, the same sequence
+      of steps runs under the hood. Here's what happens, step by step.
+    </p>
+
+    <!-- Animated pipeline diagram -->
+    <div class="pipeline-wrap">
+      <div>
+        <div class="pipeline-label std">▶ Standard pipeline</div>
+        <div class="pipeline" id="pipeline-std">
+          <!-- Boxes injected by JS for responsiveness, but also static fallback -->
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">✏️</div>
+              <div class="label">Your Prompt</div>
+              <div class="sublabel">raw text</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">🔡</div>
+              <div class="label">Tokenizer</div>
+              <div class="sublabel">text → token IDs</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">⚡</div>
+              <div class="label">Prefill</div>
+              <div class="sublabel">process all tokens once</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">🧠</div>
+              <div class="label">Transformer</div>
+              <div class="sublabel">attention + MLP</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">📊</div>
+              <div class="label">Logits</div>
+              <div class="sublabel">score for every word</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">🎲</div>
+              <div class="label">Sampling</div>
+              <div class="sublabel">pick next token</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">🔁</div>
+              <div class="label">Repeat</div>
+              <div class="sublabel">one token at a time</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box std-color">
+              <div class="icon">💬</div>
+              <div class="label">Output</div>
+              <div class="sublabel">stream to user</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flowing tokens -->
+        <div class="token-flow" style="margin-top:8px;">
+          <div id="token-track-std"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Explanation cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:32px;">
+      <div class="card">
+        <h4>🔡 Tokenization</h4>
+        <p>
+          The model doesn't read words — it reads <strong>tokens</strong> (roughly
+          word fragments). "Hello world" might become <code>[Hello, ▁world]</code>
+          or even <code>[He, llo, ▁w, orld]</code> depending on the tokenizer.
+        </p>
+        <div class="example-token-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          <span class="tok std">Hello</span>
+          <span class="tok std">▁world</span>
+          <span class="tok std">!</span>
+        </div>
+      </div>
+      <div class="card">
+        <h4>⚡ Prefill (TTFT)</h4>
+        <p>
+          Before generating anything, the model processes your entire prompt in
+          <strong>one big forward pass</strong> and stores the results in the
+          <strong>KV cache</strong>. This is the first delay you feel — Time To
+          First Token (TTFT).
+        </p>
+      </div>
+      <div class="card">
+        <h4>📊 Logits &amp; Sampling</h4>
+        <p>
+          After each forward pass the model outputs a <strong>logit score</strong>
+          for every word in its vocabulary. Softmax turns these into probabilities,
+          then <strong>sampling</strong> (or greedy argmax) picks the next token.
+        </p>
+      </div>
+      <div class="card">
+        <h4>🔁 Autoregressive Bottleneck</h4>
+        <p>
+          The model generates <strong>exactly one token per forward pass</strong>.
+          With a 7B model at 40 GB/s memory bandwidth that's roughly 1–2 tokens/s.
+          The bottleneck is reading all the weights from memory, not arithmetic.
+        </p>
+      </div>
+    </div>
+
+    <div class="highlight-box" style="margin-top:24px;">
+      <p>
+        <strong>Key insight:</strong> Most of the time during decode the GPU/CPU
+        is idle waiting for memory reads. The model's parameters need to be
+        loaded from RAM for every single token — this is called being
+        <em>memory-bandwidth bound</em>. katgpt-rs exploits this by generating
+        multiple tokens in a single round.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  2. KATGPT-RS HYBRID PIPELINE
+  ============================================================ -->
+<section id="kat-pipeline">
+  <div class="container">
+    <div class="badge badge-green">Section 2</div>
+    <h2>The katgpt-rs Hybrid Pipeline</h2>
+    <p class="section-subtitle">
+      katgpt-rs combines <strong>speculative decoding</strong>,
+      <strong>constraint pruning</strong>, a <strong>candidate tree (DDTree)</strong>,
+      and a fast <strong>verifier</strong> to commit multiple tokens per round —
+      dramatically increasing throughput.
+    </p>
+
+    <!-- Animated pipeline diagram -->
+    <div class="pipeline-wrap">
+      <div>
+        <div class="pipeline-label kat">▶ katgpt-rs pipeline</div>
+        <div class="pipeline" id="pipeline-kat">
+          <div class="pipe-stage">
+            <div class="pipe-box kat-color">
+              <div class="icon">✏️</div>
+              <div class="label">Prompt</div>
+              <div class="sublabel">raw text / game state</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box kat-color">
+              <div class="icon">🔡</div>
+              <div class="label">Tokenizer /<br/>State Encoder</div>
+              <div class="sublabel">BPE or game actions</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box kat-color">
+              <div class="icon">🗜️</div>
+              <div class="label">PFlash Prefill</div>
+              <div class="sublabel">21× seq compression</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box draft-color">
+              <div class="icon">✏️</div>
+              <div class="label">DFlash Draft</div>
+              <div class="sublabel">predict γ token dists</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box prune-color">
+              <div class="icon">✂️</div>
+              <div class="label">Constraint<br/>Pruner</div>
+              <div class="sublabel">remove invalid tokens</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box draft-color">
+              <div class="icon">🌲</div>
+              <div class="label">DDTree</div>
+              <div class="sublabel">best-first candidate tree</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box verify-color">
+              <div class="icon">✅</div>
+              <div class="label">Leviathan<br/>Verifier</div>
+              <div class="sublabel">p/q rejection sampling</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box commit-color">
+              <div class="icon">🚀</div>
+              <div class="label">Commit k tokens</div>
+              <div class="sublabel">1–γ+1 per round</div>
+            </div>
+          </div>
+          <div class="pipe-arrow"></div>
+          <div class="pipe-stage">
+            <div class="pipe-box kat-color">
+              <div class="icon">🔁</div>
+              <div class="label">Repeat</div>
+              <div class="sublabel">next round</div>
+            </div>
+          </div>
+        </div>
+        <div class="token-flow" style="margin-top:8px;">
+          <div id="token-track-kat"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step details -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:32px;">
+      <div class="card">
+        <h4>🗜️ PFlash — Prefill Compression</h4>
+        <p>
+          Instead of feeding all prompt tokens through the full model, PFlash uses
+          block-sparse attention to compress the prompt sequence by up to
+          <strong>21×</strong>, cutting TTFT (Time To First Token) by
+          <strong>29×</strong> in benchmarks. KV memory drops 93.8%.
+        </p>
+      </div>
+      <div class="card">
+        <h4>✏️ DFlash — Draft Distributions</h4>
+        <p>
+          A small <strong>draft model</strong> (or the same model in a fast path)
+          predicts marginal probability distributions for the next
+          <strong>γ</strong> tokens all at once. These are not final tokens —
+          they're candidate distributions.
+        </p>
+      </div>
+      <div class="card">
+        <h4>✂️ Constraint Pruner</h4>
+        <p>
+          Before building the tree, a domain-specific rule removes tokens that are
+          <strong>provably invalid</strong> (e.g., illegal moves in Sudoku,
+          out-of-vocabulary words, constraint violations). This can eliminate
+          99%+ of branches.
+        </p>
+      </div>
+      <div class="card">
+        <h4>🌲 DDTree — Best-First Candidate Tree</h4>
+        <p>
+          The filtered distributions are assembled into a
+          <strong>token tree</strong> using best-first search. Each node is a
+          candidate token; each path from root to leaf is a candidate sequence.
+          Budget controls depth × width.
+        </p>
+      </div>
+      <div class="card">
+        <h4>✅ Leviathan Verifier</h4>
+        <p>
+          The target model evaluates the tree. Each candidate token is
+          accepted with probability <code>min(1, p/q)</code> where
+          <code>p</code> is the target's distribution and <code>q</code> is the
+          draft's. Rejected tokens are replaced by sampling the residual
+          distribution. <strong>Output is identical to pure AR sampling.</strong>
+        </p>
+      </div>
+      <div class="card">
+        <h4>🚀 Commit Multiple Tokens</h4>
+        <p>
+          On a good round with high acceptance rate, we commit
+          <strong>γ+1 tokens in one verifier call</strong>. With γ=4 and 80%
+          acceptance, we get ~3.6 tokens per round instead of 1. Combined
+          with fused kernels and a tiny micro-model, this reaches 10k–30k tok/s.
+        </p>
+      </div>
+    </div>
+
+    <div class="highlight-box green" style="margin-top:24px;">
+      <p>
+        <strong>Why does this preserve quality?</strong> The Leviathan verifier
+        guarantees that the final output distribution is <em>identical</em> to what
+        the target model would have produced with standard autoregressive decoding.
+        Speed comes from amortizing the expensive forward pass across multiple tokens,
+        not from degrading output quality.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  3. SIDE-BY-SIDE COMPARISON
+  ============================================================ -->
+<section id="compare">
+  <div class="container">
+    <div class="badge badge-purple">Section 3</div>
+    <h2>Side-by-Side Comparison</h2>
+    <p class="section-subtitle">
+      Comparing the standard autoregressive pipeline with katgpt-rs at a glance.
+    </p>
+
+    <div class="compare-grid">
+      <!-- Standard LLM -->
+      <div class="compare-card std-card">
+        <h3 style="color:var(--token-std)">Standard LLM</h3>
+        <ul class="step-list">
+          <li><span class="step-num std">1</span><span>Tokenize prompt → token IDs</span></li>
+          <li><span class="step-num std">2</span><span>Full prefill pass through transformer (builds KV cache)</span></li>
+          <li><span class="step-num std">3</span><span>Forward pass → logits over entire vocabulary</span></li>
+          <li><span class="step-num std">4</span><span>Sample one token from the distribution</span></li>
+          <li><span class="step-num std">5</span><span>Append token, repeat from step 3</span></li>
+          <li><span class="step-num std">6</span><span><strong>N output tokens = N forward passes</strong></span></li>
+        </ul>
+        <div style="margin-top:16px;">
+          <div class="metric-label">Tokens per forward pass</div>
+          <div class="metric-value" style="color:var(--token-std)">1</div>
+          <div class="metric-label" style="margin-top:8px;">Prefill compression</div>
+          <div class="metric-value" style="color:var(--token-std)">1×</div>
+        </div>
+      </div>
+
+      <!-- katgpt-rs -->
+      <div class="compare-card kat-card">
+        <h3 style="color:var(--token-kat)">katgpt-rs Hybrid</h3>
+        <ul class="step-list">
+          <li><span class="step-num kat">1</span><span>Tokenize / encode game state</span></li>
+          <li><span class="step-num kat">2</span><span>PFlash compressed prefill (21× seq reduction, 93.8% KV reduction)</span></li>
+          <li><span class="step-num kat">3</span><span>DFlash generates marginal distributions for γ future tokens</span></li>
+          <li><span class="step-num kat">4</span><span>ConstraintPruner filters invalid candidates before tree build</span></li>
+          <li><span class="step-num kat">5</span><span>DDTree builds best-first candidate token tree</span></li>
+          <li><span class="step-num kat">6</span><span>LeviathanVerifier accepts/rejects via p/q sampling</span></li>
+          <li><span class="step-num kat">7</span><span>Commit accepted tokens (1 to γ+1), repeat</span></li>
+          <li><span class="step-num kat">8</span><span><strong>N output tokens ≈ N/accepted_per_round verifier calls</strong></span></li>
+        </ul>
+        <div style="margin-top:16px;">
+          <div class="metric-label">Tokens per verifier call (typical)</div>
+          <div class="metric-value" style="color:var(--token-kat)" id="cmp-tpv">3–5</div>
+          <div class="metric-label" style="margin-top:8px;">Prefill compression</div>
+          <div class="metric-value" style="color:var(--token-kat)">21×</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature table -->
+    <div style="overflow-x:auto;margin-top:24px;">
+      <table class="mapping-table" style="min-width:560px;">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Standard LLM</th>
+            <th>katgpt-rs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Forward passes per output token</td><td>1.0</td><td style="color:var(--green)">~0.2–0.5</td></tr>
+          <tr><td>Prefill sequence length</td><td>Full prompt length</td><td style="color:var(--green)">Compressed 21×</td></tr>
+          <tr><td>KV cache memory</td><td>Full O(N)</td><td style="color:var(--green)">−93.8%</td></tr>
+          <tr><td>Output quality</td><td>Target distribution</td><td style="color:var(--green)">Identical (Leviathan proof)</td></tr>
+          <tr><td>Domain constraints</td><td>Post-processing / rejection loop</td><td style="color:var(--green)">Pre-tree pruning (before any compute)</td></tr>
+          <tr><td>Attention mode</td><td>O(N) softmax</td><td style="color:var(--green)">Optional O(1) recurrent (GDN2)</td></tr>
+          <tr><td>MLP compute</td><td>Dense</td><td style="color:var(--green)">Sparse (skip dead ReLU)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  4. INTERACTIVE CONTROLS + METRICS
+  ============================================================ -->
+<section id="interactive">
+  <div class="container">
+    <div class="badge badge-blue">Section 4</div>
+    <h2>Interactive Simulation</h2>
+    <p class="section-subtitle">
+      Adjust the sliders to see how each parameter affects throughput, latency,
+      and efficiency in real time. Metrics update instantly.
+    </p>
+
+    <!-- Sliders -->
+    <div class="controls-grid">
+
+      <div class="slider-card">
+        <label>Prompt length (tokens) <span id="lbl-prompt">64</span></label>
+        <input type="range" id="sl-prompt" min="8" max="512" value="64" step="8" />
+        <p>Number of tokens in the input prompt. Longer prompts increase prefill cost.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Output tokens <span id="lbl-output">128</span></label>
+        <input type="range" id="sl-output" min="8" max="512" value="128" step="8" />
+        <p>Total tokens to generate. The "work" that throughput is measured against.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Draft lookahead γ <span id="lbl-gamma">4</span></label>
+        <input type="range" id="sl-gamma" min="1" max="16" value="4" step="1" />
+        <p>How many future tokens the draft model guesses. Higher γ = more tokens per round if accepted.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Acceptance rate α <span id="lbl-alpha">0.75</span></label>
+        <input type="range" id="sl-alpha" min="0.1" max="1.0" value="0.75" step="0.01" />
+        <p>Fraction of draft tokens accepted by the verifier. Low α → fewer tokens committed per round.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Prune rate ρ <span id="lbl-prune">0.60</span></label>
+        <input type="range" id="sl-prune" min="0.0" max="0.99" value="0.60" step="0.01" />
+        <p>Fraction of candidate branches pruned by the ConstraintPruner before tree build.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Prefill compression <span id="lbl-comp">21</span>×</label>
+        <input type="range" id="sl-comp" min="1" max="29" value="21" step="1" />
+        <p>PFlash sequence length reduction. 1× = no compression (standard). 21× = PFlash max.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Verifier latency (ms) <span id="lbl-vlat">2.0</span></label>
+        <input type="range" id="sl-vlat" min="0.5" max="20" value="2.0" step="0.5" />
+        <p>Time for one verifier (target model) forward pass. Micro-model ~2ms; large LLM ~500ms.</p>
+      </div>
+
+      <div class="slider-card">
+        <label>Decode latency (ms) <span id="lbl-dlat">0.5</span></label>
+        <input type="range" id="sl-dlat" min="0.1" max="10" value="0.5" step="0.1" />
+        <p>Time for one draft/decode step. Typically much cheaper than the verifier pass.</p>
+      </div>
+
+    </div>
+
+    <!-- Live metrics -->
+    <h3 style="margin-bottom:16px;">📊 Derived Metrics (real-time)</h3>
+    <div class="metrics-grid">
+      <div class="metric-card green">
+        <div class="metric-label">Accepted tokens / round (katgpt-rs)</div>
+        <div class="metric-value" id="m-tpr">—</div>
+        <div class="metric-sub">Expected: α^1 + α^2 + … + α^γ + 1 bonus</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Rounds needed (katgpt-rs)</div>
+        <div class="metric-value" id="m-rounds">—</div>
+        <div class="metric-sub">output_tokens / accepted_per_round</div>
+      </div>
+      <div class="metric-card green">
+        <div class="metric-label">Estimated tok/s — katgpt-rs</div>
+        <div class="metric-value" id="m-tps-kat">—</div>
+        <div class="metric-sub">committed tokens / wall time</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Estimated tok/s — Standard</div>
+        <div class="metric-value" id="m-tps-std">—</div>
+        <div class="metric-sub">1 token / (decode_lat + verifier_lat)</div>
+      </div>
+      <div class="metric-card orange">
+        <div class="metric-label">Speedup vs standard</div>
+        <div class="metric-value" id="m-speedup">—</div>
+        <div class="metric-sub">katgpt-rs tok/s ÷ standard tok/s</div>
+      </div>
+      <div class="metric-card purple">
+        <div class="metric-label">Total latency — katgpt-rs (ms)</div>
+        <div class="metric-value" id="m-lat-kat">—</div>
+        <div class="metric-sub">prefill + rounds × (γ×decode + verify)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total latency — Standard (ms)</div>
+        <div class="metric-value" id="m-lat-std">—</div>
+        <div class="metric-sub">prefill + output × (decode + verify)</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-label">Pruned branches / compute saved</div>
+        <div class="metric-value" id="m-pruned">—</div>
+        <div class="metric-sub">Constraint pruner effectiveness (ρ)</div>
+      </div>
+    </div>
+
+    <!-- Compare bar -->
+    <div style="margin-top:32px;">
+      <h4 style="margin-bottom:12px;">Relative total latency</h4>
+      <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-muted);margin-bottom:4px;">
+            <span style="color:var(--token-std);">▓ Standard LLM</span>
+            <span id="bar-std-label">—</span>
+          </div>
+          <div class="progress-bar-outer" style="height:10px;">
+            <div class="progress-bar-inner" id="bar-std" style="width:100%;background:var(--token-std);"></div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-muted);margin-bottom:4px;">
+            <span style="color:var(--token-kat);">▓ katgpt-rs</span>
+            <span id="bar-kat-label">—</span>
+          </div>
+          <div class="progress-bar-outer" style="height:10px;">
+            <div class="progress-bar-inner" id="bar-kat" style="width:50%;background:var(--token-kat);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  5. ANIMATED WALKTHROUGH
+  ============================================================ -->
+<section id="animation">
+  <div class="container">
+    <div class="badge badge-green">Section 5</div>
+    <h2>Animated Token Walkthrough</h2>
+    <p class="section-subtitle">
+      Watch tokens move through each pipeline step by step. The log on the right
+      shows what each stage does.
+    </p>
+
+    <div class="anim-controls">
+      <button class="btn primary" id="btn-run-std">▶ Run Standard LLM</button>
+      <button class="btn primary" id="btn-run-kat" style="background:var(--green);border-color:var(--green);">▶ Run katgpt-rs</button>
+      <button class="btn danger" id="btn-reset">⟳ Reset</button>
+      <label style="font-size:.85rem;color:var(--text-muted);">Speed:
+        <select class="speed-select" id="anim-speed">
+          <option value="400">Slow</option>
+          <option value="200" selected>Normal</option>
+          <option value="80">Fast</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="animation-stage">
+      <div id="anim-log"><span class="log-info">Press ▶ Run Standard LLM or ▶ Run katgpt-rs to begin the simulation…</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  6. DDTREE VISUALIZATION
+  ============================================================ -->
+<section id="tree-viz">
+  <div class="container">
+    <div class="badge badge-purple">Section 6</div>
+    <h2>DDTree — Candidate Token Tree</h2>
+    <p class="section-subtitle">
+      This is the core data structure in katgpt-rs. Each node is a candidate
+      token. The verifier walks from root to a leaf, accepting or rejecting at
+      each level.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:24px;">
+      <div class="card">
+        <h4>How it's built</h4>
+        <p>
+          1. DFlash produces a probability distribution over the vocabulary for
+          each depth level (depth 0 = next token, depth 1 = token after that…).
+          <br/>
+          2. ConstraintPruner removes invalid tokens from each distribution.
+          <br/>
+          3. A <strong>best-first heap</strong> expands nodes until the budget
+          is exhausted — high-probability paths get expanded first.
+        </p>
+      </div>
+      <div class="card">
+        <h4>How it's verified</h4>
+        <p>
+          The target model runs a single batched forward pass over all leaf
+          nodes. For each node, if <code>p(token)/q(token) ≥ U[0,1]</code>
+          the token is accepted. On rejection, a residual sample ends the path
+          and provides the corrected token.
+        </p>
+      </div>
+      <div class="card">
+        <h4>Sudoku example</h4>
+        <p>
+          For a Sudoku solver, each token is a digit (1–9) for a cell. The
+          ConstraintPruner eliminates digits that already appear in the same
+          row/column/box. The DDTree only contains <strong>valid partial
+          solutions</strong> — invalid branches are never evaluated.
+        </p>
+      </div>
+    </div>
+
+    <div class="anim-controls">
+      <button class="btn primary" id="btn-build-tree">🌲 Build Demo Tree</button>
+      <button class="btn" id="btn-verify-tree">✅ Verify Tree</button>
+      <button class="btn danger" id="btn-reset-tree">⟳ Reset</button>
+    </div>
+    <div class="tree-wrap">
+      <svg id="tree-svg" width="800" height="340"></svg>
+    </div>
+    <div id="tree-log" style="margin-top:12px;font-size:.8rem;color:var(--text-muted);font-family:monospace;min-height:24px;"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+  7. GAMES & PUZZLES
+  ============================================================ -->
+<section id="game">
+  <div class="container">
+    <div class="badge badge-orange" style="background:rgba(247,140,62,.15);color:var(--orange);">Section 7</div>
+    <h2>The Same Architecture for Games &amp; Puzzles</h2>
+    <p class="section-subtitle">
+      The pipeline isn't just for text generation. katgpt-rs uses the exact same
+      speculative-decoding + constraint-pruning architecture for game AI and
+      puzzle solving.
+    </p>
+
+    <div class="game-grid">
+      <div class="game-card">
+        <h4>🎯 Text Generation ↔ Game/Puzzle Analogy</h4>
+        <table class="mapping-table" style="margin-top:8px;">
+          <thead>
+            <tr><th>Text LLM concept</th><th>Game / Puzzle equivalent</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Token</td><td>Game action / move / digit</td></tr>
+            <tr><td>Vocabulary</td><td>Action space (all legal moves)</td></tr>
+            <tr><td>Prompt</td><td>Current game state</td></tr>
+            <tr><td>KV cache</td><td>State history / encoding</td></tr>
+            <tr><td>Logits</td><td>Move quality scores</td></tr>
+            <tr><td>Sampling</td><td>Action selection policy</td></tr>
+            <tr><td>ConstraintPruner</td><td>Legal move filter (e.g. Sudoku rules)</td></tr>
+            <tr><td>DDTree</td><td>Game tree / search tree</td></tr>
+            <tr><td>Verifier</td><td>Roll-out evaluator / MCTS critic</td></tr>
+            <tr><td>Commit tokens</td><td>Commit multiple moves ahead</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="game-card" style="margin-bottom:16px;">
+          <h4>🧩 Sudoku Solver</h4>
+          <p>
+            katgpt-rs can solve Sudoku puzzles including Inkala's "world's
+            hardest" with a <strong>7,079× compression</strong> vs brute force.
+            <br/>
+            The ConstraintPruner filters candidates for each cell using row,
+            column, and box constraints — eliminating most of the search space
+            before the DDTree even starts.
+          </p>
+          <div class="sudoku-wrap" style="margin-top:12px;">
+            <div class="sudoku-board" id="sudoku-board">
+              <!-- 81 cells injected by JS -->
+            </div>
+            <div class="sudoku-info">
+              <p style="margin-bottom:8px;color:var(--text);">
+                <strong>Demo — cell fill order</strong>
+              </p>
+              <p style="font-size:.82rem;">
+                Given digits shown in grey. Draft candidates shown in
+                <span style="color:var(--token-draft)">yellow</span>.
+                Pruned (invalid) in <span style="color:var(--token-prune)">red</span>.
+                Accepted in <span style="color:var(--green)">green</span>.
+              </p>
+              <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn primary" id="btn-sudoku-run" style="font-size:.8rem;padding:6px 14px;">▶ Simulate</button>
+                <button class="btn danger" id="btn-sudoku-reset" style="font-size:.8rem;padding:6px 14px;">⟳ Reset</button>
+              </div>
+              <div id="sudoku-log" style="margin-top:10px;font-size:.75rem;color:var(--text-muted);font-family:monospace;min-height:40px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="game-card">
+          <h4>💣 Bomber Arena</h4>
+          <p>
+            In the Bomber arena demo, katgpt-rs acts as a game AI agent.
+            The action space (move up/down/left/right, place bomb, wait) is
+            the "vocabulary". The ConstraintPruner blocks moves that would
+            walk into a bomb blast radius. The DDTree explores multi-step
+            action sequences before committing.
+          </p>
+          <div class="highlight-box" style="margin-top:8px;">
+            <p style="font-size:.85rem;">
+              <strong>Result:</strong> Bomber HL score <strong>+177</strong>
+              vs random agent −55.
+              NFSP/MCTS duality achieves <strong>75% win rate</strong>
+              vs MCTS's 8%.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;" class="card">
+      <h4>🧠 Why does the same architecture work for both?</h4>
+      <p style="margin-top:8px;">
+        Both text generation and game-playing are <strong>sequential decision
+        problems</strong> under uncertainty. In both cases:
+      </p>
+      <ul style="color:var(--text-muted);font-size:.9rem;margin-left:20px;margin-top:8px;line-height:2;">
+        <li>There is a <strong>state</strong> (conversation history / board state)</li>
+        <li>There is an <strong>action space</strong> (next word / next move)</li>
+        <li>Some actions are <strong>invalid</strong> (grammar constraints / game rules)</li>
+        <li>A <strong>model</strong> scores candidate actions</li>
+        <li>We want to find a <strong>good sequence of actions quickly</strong></li>
+      </ul>
+      <p style="margin-top:8px;">
+        Speculative decoding + DDTree + ConstraintPruner solves this efficiently
+        regardless of whether "tokens" are English words or game moves.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  8. GLOSSARY
+  ============================================================ -->
+<section id="glossary">
+  <div class="container">
+    <div class="badge badge-purple">Section 8</div>
+    <h2>Glossary for Developers</h2>
+    <p class="section-subtitle">
+      New to LLMs? Here's a plain-English explanation of every term used in
+      this demo, with small examples where helpful.
+    </p>
+
+    <div class="glossary-grid">
+
+      <dl class="gloss-card">
+        <dt>Token</dt>
+        <dd>
+          The atomic unit of text that an LLM processes. A token is roughly
+          <strong>¾ of a word</strong> on average — but tokenization is
+          vocabulary-specific. Numbers, punctuation, and rare words may each
+          become multiple tokens.
+          <div class="example">"Hello world!" → [Hello] [▁world] [!]</div>
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Tokenizer</dt>
+        <dd>
+          The preprocessing step that converts raw text into a sequence of
+          integer <strong>token IDs</strong> (and back again). katgpt-rs uses
+          a custom BPE tokenizer with vocab size 27 (a–z + BOS) for its
+          micro-model. Large LLMs use vocabularies of 32k–128k tokens.
+          <div class="example">encode("cat") → [3, 1, 20]</div>
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Prefill</dt>
+        <dd>
+          The phase where the model processes all prompt tokens <em>before</em>
+          generating any output. Results are stored in the <strong>KV cache</strong>
+          so they don't need to be recomputed. Long prompts = expensive prefill.
+          The time until the first output token is called <strong>TTFT</strong>
+          (Time To First Token).
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>KV Cache</dt>
+        <dd>
+          Attention computes a <strong>Key</strong> and <strong>Value</strong>
+          matrix for every token. Once computed, these are cached — so decoding
+          new tokens only needs to compute K/V for the new token, not re-read
+          the entire history. Without KV cache, decoding would be O(N²).
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Decode / Autoregressive Decoding</dt>
+        <dd>
+          The loop where the model generates one token at a time by
+          <strong>feeding its own output back as input</strong>. Standard decoding
+          is strictly serial — each token depends on all previous tokens.
+          katgpt-rs breaks this with speculative decoding.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Logits</dt>
+        <dd>
+          The raw, unnormalized scores the model assigns to every possible next
+          token. A softmax converts them to a <strong>probability distribution</strong>.
+          The token with the highest logit is the most likely next token (greedy).
+          <div class="example">logits: [cat: 2.1, dog: 1.8, the: -0.3, …]</div>
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Sampling</dt>
+        <dd>
+          How the next token is chosen from the logit distribution. Common strategies:
+          <strong>greedy</strong> (always pick top-1), <strong>top-k</strong>
+          (sample from top-k tokens), <strong>top-p / nucleus</strong>
+          (sample from smallest set covering p% probability).
+          katgpt-rs uses categorical + residual sampling in the verifier.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Speculative Decoding</dt>
+        <dd>
+          A technique where a cheap <strong>draft model</strong> predicts γ
+          future tokens, and the expensive <strong>target model</strong> verifies
+          them in one batched pass. Accepted tokens are committed; rejected tokens
+          trigger a correction. Output quality is provably identical to pure
+          autoregressive sampling (Leviathan et al. 2022).
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Draft Model (DFlash)</dt>
+        <dd>
+          A small, fast model that predicts marginal probability distributions
+          for the next γ tokens. It doesn't need to be perfect — just good
+          enough to have high acceptance rate. In katgpt-rs, <strong>DFlash</strong>
+          runs the same micro-transformer in a faster path.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Constraint Pruner</dt>
+        <dd>
+          A deterministic rule that marks token IDs as valid or invalid
+          <em>before</em> building the candidate tree. In Sudoku, a pruner
+          removes digits already used in the same row/column/box. In text
+          generation, a pruner might enforce grammar or domain vocabulary.
+          <div class="example">cell(0,0) used: {1,3,5} → valid: {2,4,6,7,8,9}</div>
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>DDTree (Candidate Token Tree)</dt>
+        <dd>
+          A <strong>best-first token tree</strong> built from the draft distributions
+          after pruning. Each node is a (token, depth, parent_path, score). A
+          <strong>max-heap</strong> expands the highest-scoring nodes first. The
+          tree compactly represents all candidate sequences the verifier might
+          accept.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Verifier (LeviathanVerifier)</dt>
+        <dd>
+          The target model evaluated on the draft's candidate tree. It computes
+          target probabilities <code>p(token)</code> and accepts each draft token
+          with probability <code>min(1, p/q)</code>. If rejected, samples from
+          <code>max(0, p − q)</code>. The bonus token at full acceptance gives
+          <strong>γ+1 tokens per round</strong>.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Tree Search</dt>
+        <dd>
+          Exploring a branching space of possibilities systematically. In chess
+          engines (Minimax, MCTS), tree search finds good moves by looking ahead.
+          In katgpt-rs, DDTree search finds good token sequences by looking ahead
+          γ steps — using draft distributions instead of full forward passes.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Acceptance Rate (α)</dt>
+        <dd>
+          The fraction of draft tokens that pass the verifier's p/q test. With
+          α = 0.8 and γ = 4, expected accepted tokens per round =
+          <code>α + α² + α³ + α⁴ + 1 ≈ 3.95</code>. Higher α = more tokens
+          committed per verifier call = higher throughput.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>Memory Bandwidth Bound</dt>
+        <dd>
+          LLM decode is limited by how fast weights can be read from RAM, not by
+          arithmetic throughput. Each forward pass reads all model weights — for
+          a 7B model that's ~14 GB. At 40 GB/s bandwidth: ~2 tokens/s. This is
+          why batching (or speculative decoding) dramatically improves efficiency.
+        </dd>
+      </dl>
+
+      <dl class="gloss-card">
+        <dt>BPE (Byte-Pair Encoding)</dt>
+        <dd>
+          The most common tokenization algorithm. It iteratively merges the most
+          frequent adjacent byte/character pairs to build a vocabulary. Given
+          enough merges, common words become single tokens and rare words are
+          split into subword pieces.
+          <div class="example">"playing" → [play] [ing] (if "ing" is frequent)</div>
+        </dd>
+      </dl>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  FOOTER
+  ============================================================ -->
+<footer>
+  <div class="container">
+    <p>
+      <a href="https://github.com/chankung9/katgpt-rs" target="_blank">
+        katgpt-rs on GitHub
+      </a>
+      · Educational simulation · Not a strict benchmark ·
+      MIT Licensed
+    </p>
+    <p style="margin-top:8px;">
+      Pipeline concepts faithful to the
+      <a href="https://github.com/chankung9/katgpt-rs/blob/main/README.md" target="_blank">
+        repository README
+      </a>
+      and
+      <a href="https://github.com/chankung9/katgpt-rs/blob/main/.docs/03_speculative_decoding.md" target="_blank">
+        speculative decoding docs
+      </a>.
+      Leviathan et al. 2022 — "Fast Inference from Transformers via Speculative Decoding".
+    </p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

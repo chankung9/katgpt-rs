@@ -10,6 +10,8 @@
 // -------------------------------------------------------
 /** Vocabulary size of the katgpt-rs micro-model (a–z + BOS = 27). */
 const MICRO_VOCAB_SIZE = 27;
+const MAX_VISIBLE_TOKENS = 6;
+const ALPHA_EPSILON = 1e-6;
 
 /**
  * Track cancellable timeouts for a demo section so manual stop/reset actions
@@ -143,7 +145,7 @@ function setText(id, text) {
     span.textContent = text;
     trackEl.appendChild(span);
 
-    while (trackEl.children.length > 6) {
+    while (trackEl.children.length > MAX_VISIBLE_TOKENS) {
       const first = trackEl.firstChild;
       first.style.transition = 'opacity .2s';
       first.style.opacity = '0';
@@ -222,7 +224,7 @@ function setText(id, text) {
    * geometric series, giving the closed form below.
    */
   function expectedAccepted(alpha, gamma) {
-    if (Math.abs(1.0 - alpha) < 1e-6) return gamma + 1;
+    if (Math.abs(1.0 - alpha) < ALPHA_EPSILON) return gamma + 1;
     // Correct Leviathan formula:
     // E[#accepted] = (1 - α^(γ+1)) / (1 - α)
     return (1 - Math.pow(alpha, gamma + 1)) / (1 - alpha);
@@ -271,6 +273,7 @@ function setText(id, text) {
     const speedup = tpsKat / tpsStd;
 
     // ---- pruning ----
+    // Estimate: γ depth levels × micro-model vocab size × prune rate.
     const prunedBranches = Math.round(gamma * MICRO_VOCAB_SIZE * rho);
     const computeSavedPercent = (rho * 100).toFixed(0);
 

@@ -148,9 +148,11 @@ function setText(id, text) {
 
     if (trackEl.children.length > MAX_VISIBLE_TOKENS) {
       const first = trackEl.firstChild;
-      first.style.transition = 'opacity .2s';
-      first.style.opacity = '0';
-      timers.set(() => first.remove(), 180);
+      if (first) {
+        first.style.transition = 'opacity .2s';
+        first.style.opacity = '0';
+        timers.set(() => first.remove(), 180);
+      }
     }
 
     timers.set(() => stepTrack(trackEl, tokens, interval, index + 1), interval);

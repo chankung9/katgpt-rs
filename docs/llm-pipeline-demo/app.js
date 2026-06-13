@@ -216,7 +216,7 @@ function setText(id, text) {
    * geometric series, giving the closed form below.
    */
   function expectedAccepted(alpha, gamma) {
-    if (alpha >= 1.0) return gamma + 1;
+    if (Math.abs(1.0 - alpha) < Number.EPSILON) return gamma + 1;
     // Correct Leviathan formula:
     // E[#accepted] = (1 - α^(γ+1)) / (1 - α)
     return (1 - Math.pow(alpha, gamma + 1)) / (1 - alpha);
@@ -297,10 +297,6 @@ function setText(id, text) {
     }
   }
 
-  function setText(id, txt) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = txt;
-  }
 
   Object.values(sliders).forEach(sl => sl && sl.addEventListener('input', updateMetrics));
   updateMetrics();

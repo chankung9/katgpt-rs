@@ -226,8 +226,6 @@ function setText(id, text) {
    */
   function expectedAccepted(alpha, gamma) {
     if (Math.abs(ALPHA_MAX - alpha) < ALPHA_EPSILON) return gamma + 1;
-    // Correct Leviathan formula:
-    // E[#accepted] = (1 - α^(γ+1)) / (1 - α)
     return (1 - Math.pow(alpha, gamma + 1)) / (1 - alpha);
   }
 
@@ -299,7 +297,7 @@ function setText(id, text) {
     setText('bar-kat-label', Math.round(totalKatMs).toLocaleString() + ' ms');
     setText('bar-std-label', Math.round(totalStdMs).toLocaleString() + ' ms');
 
-    // Colour the speedup
+    // Color the speedup
     const mspeedup = document.getElementById('m-speedup');
     if (mspeedup) {
       mspeedup.style.color = speedup >= 2 ? 'var(--green)' :
@@ -713,6 +711,10 @@ function setText(id, text) {
   let running = false;
   let boardReady = false;
 
+  function isBoxBoundary(index) {
+    return index === 2 || index === 5;
+  }
+
   function setIdleBoard() {
     board.classList.add('idle');
     board.innerHTML = '<div class="sudoku-placeholder">Board loads on demand. Click Simulate to run the short constraint-pruning demo.</div>';
@@ -727,8 +729,8 @@ function setText(id, text) {
       for (let c = 0; c < 9; c++) {
         const div = document.createElement('div');
         div.className = 'sudoku-cell';
-        if (c === 2 || c === 5) div.classList.add('box-right');
-        if (r === 2 || r === 5) div.classList.add('box-bottom');
+        if (isBoxBoundary(c)) div.classList.add('box-right');
+        if (isBoxBoundary(r)) div.classList.add('box-bottom');
 
         const g = GIVEN[r][c];
         if (g !== 0) {
@@ -754,8 +756,8 @@ function setText(id, text) {
   function paintCell(el, r, c, text, cls) {
     el.textContent = text;
     el.className = `sudoku-cell ${cls}`.trim();
-    if (r === 2 || r === 5) el.classList.add('box-bottom');
-    if (c === 2 || c === 5) el.classList.add('box-right');
+    if (isBoxBoundary(r)) el.classList.add('box-bottom');
+    if (isBoxBoundary(c)) el.classList.add('box-right');
   }
 
   async function runSudoku() {
@@ -773,8 +775,9 @@ function setText(id, text) {
       if (logEl) logEl.textContent = `Trying cell(${r + 1},${c + 1}): draft=${draftDigit} → constraint check…`;
       if (!(await timers.sleep(120))) return;
 
+      const conflictReason = ['row', 'column', 'box'][(r + c) % 3];
       paintCell(el, r, c, '✗', 'pruned');
-      if (logEl) logEl.textContent = `  ✗ pruned: ${draftDigit} already conflicts with the row, column, or box`;
+      if (logEl) logEl.textContent = `  ✗ pruned: ${draftDigit} conflicts with the ${conflictReason} constraint`;
       if (!(await timers.sleep(100))) return;
 
       paintCell(el, r, c, digit, 'accepted');

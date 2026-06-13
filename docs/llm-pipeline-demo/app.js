@@ -11,6 +11,7 @@
 /** Vocabulary size of the katgpt-rs micro-model (a–z + BOS = 27). */
 const MICRO_VOCAB_SIZE = 27;
 const MAX_VISIBLE_TOKENS = 6;
+const ALPHA_MAX = 1.0;
 const ALPHA_EPSILON = 1e-6;
 
 /**
@@ -224,7 +225,7 @@ function setText(id, text) {
    * geometric series, giving the closed form below.
    */
   function expectedAccepted(alpha, gamma) {
-    if (Math.abs(1.0 - alpha) < ALPHA_EPSILON) return gamma + 1;
+    if (Math.abs(ALPHA_MAX - alpha) < ALPHA_EPSILON) return gamma + 1;
     // Correct Leviathan formula:
     // E[#accepted] = (1 - α^(γ+1)) / (1 - α)
     return (1 - Math.pow(alpha, gamma + 1)) / (1 - alpha);
@@ -475,7 +476,8 @@ function setText(id, text) {
   if (!svg) return;
 
   const NS = 'http://www.w3.org/2000/svg';
-  const W = 800, H = 340;
+  const SVG_WIDTH = parseInt(svg.getAttribute('width') || '800', 10);
+  const SVG_HEIGHT = parseInt(svg.getAttribute('height') || '340', 10);
   const timers = createTimerGroup();
 
   const COL = {
@@ -512,8 +514,8 @@ function setText(id, text) {
   function clear() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     const rect = document.createElementNS(NS, 'rect');
-    rect.setAttribute('width', W);
-    rect.setAttribute('height', H);
+    rect.setAttribute('width', SVG_WIDTH);
+    rect.setAttribute('height', SVG_HEIGHT);
     rect.setAttribute('fill', COL.bg);
     rect.setAttribute('rx', 8);
     svg.appendChild(rect);
@@ -522,15 +524,15 @@ function setText(id, text) {
   function drawIdleState() {
     clear();
     const text = document.createElementNS(NS, 'text');
-    text.setAttribute('x', W / 2);
-    text.setAttribute('y', H / 2 - 10);
+    text.setAttribute('x', SVG_WIDTH / 2);
+    text.setAttribute('y', SVG_HEIGHT / 2 - 10);
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('fill', '#8892a4');
     text.setAttribute('font-size', '16');
     text.textContent = 'Tree visualization is idle.';
     const sub = document.createElementNS(NS, 'text');
-    sub.setAttribute('x', W / 2);
-    sub.setAttribute('y', H / 2 + 18);
+    sub.setAttribute('x', SVG_WIDTH / 2);
+    sub.setAttribute('y', SVG_HEIGHT / 2 + 18);
     sub.setAttribute('text-anchor', 'middle');
     sub.setAttribute('fill', '#8892a4');
     sub.setAttribute('font-size', '12');
